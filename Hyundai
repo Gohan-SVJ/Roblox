@@ -1,0 +1,122 @@
+local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+
+-- Hyundai Future Adventure place ID
+local PLACE_ID = 13457104744
+
+-- SETTINGS
+local SPEED = 120
+
+----------------------------------------------------------------
+-- TELEPORT TO EVENT OBBY FIRST
+----------------------------------------------------------------
+local args = {
+	"teleport_SeasonEvent",
+	"Obby"
+}
+
+ReplicatedStorage
+	:WaitForChild("RemoteMessenger")
+	:WaitForChild("SendData")
+	:FireServer(unpack(args))
+
+print("Teleporting to Obby...")
+
+task.wait(10)
+
+----------------------------------------------------------------
+-- CHARACTER
+----------------------------------------------------------------
+local function getCharacter()
+	local character = player.Character or player.CharacterAdded:Wait()
+	local hrp = character:WaitForChild("HumanoidRootPart")
+	local humanoid = character:WaitForChild("Humanoid")
+	return character, hrp, humanoid
+end
+
+local character, hrp, humanoid = getCharacter()
+
+player.CharacterAdded:Connect(function()
+	character, hrp, humanoid = getCharacter()
+end)
+
+----------------------------------------------------------------
+-- TWEEN FUNCTION
+----------------------------------------------------------------
+local function tweenTo(position)
+	repeat
+		if not character or not hrp or humanoid.Health <= 0 then
+			task.wait(1)
+		else
+			local distance = (hrp.Position - position).Magnitude
+			local time = distance / SPEED
+
+			local tween = TweenService:Create(
+				hrp,
+				TweenInfo.new(time, Enum.EasingStyle.Linear),
+				{
+					CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
+				}
+			)
+
+			tween:Play()
+
+			local reached = false
+
+			local connection
+			connection = tween.Completed:Connect(function()
+				reached = true
+				connection:Disconnect()
+			end)
+
+			repeat
+				task.wait(0.5)
+
+				if humanoid.Health <= 0 then
+					tween:Cancel()
+					break
+				end
+
+			until reached
+
+			if reached then
+				break
+			end
+		end
+	until false
+end
+
+----------------------------------------------------------------
+-- WAIT FOR TICKET FOLDER
+----------------------------------------------------------------
+local folder = workspace:WaitForChild("SpinTicketFolder")
+
+----------------------------------------------------------------
+-- COLLECT ALL TICKETS
+----------------------------------------------------------------
+for i, obj in ipairs(folder:GetChildren()) do
+	local targetPos
+
+	if obj:IsA("Model") then
+		targetPos = obj:GetPivot().Position
+	elseif obj:IsA("BasePart") then
+		targetPos = obj.Position
+	end
+
+	if targetPos then
+		print("Going to:", obj.Name)
+		tweenTo(targetPos)
+		task.wait(1)
+	end
+end
+
+print("Finished all tickets")
+
+----------------------------------------------------------------
+-- TELEPORT BACK TO GAME
+----------------------------------------------------------------
+TeleportService:Teleport(PLACE_ID, player)
