@@ -11,9 +11,9 @@ local PLACE_ID = 13457104744
 -- SETTINGS
 local SPEED = 120
 
-----------------------------------------------------------------
--- TELEPORT TO EVENT OBBY FIRST
-----------------------------------------------------------------
+---------------------------------------------------
+-- TELEPORT TO EVENT FIRST
+---------------------------------------------------
 local args = {
 	"teleport_SeasonEvent",
 	"Obby"
@@ -26,11 +26,11 @@ ReplicatedStorage
 
 print("Teleporting to Obby...")
 
-task.wait(10)
+task.wait(5)
 
-----------------------------------------------------------------
+---------------------------------------------------
 -- CHARACTER
-----------------------------------------------------------------
+---------------------------------------------------
 local function getCharacter()
 	local character = player.Character or player.CharacterAdded:Wait()
 	local hrp = character:WaitForChild("HumanoidRootPart")
@@ -44,22 +44,28 @@ player.CharacterAdded:Connect(function()
 	character, hrp, humanoid = getCharacter()
 end)
 
-----------------------------------------------------------------
--- TWEEN FUNCTION
-----------------------------------------------------------------
+---------------------------------------------------
+-- SAFE TWEEN FUNCTION (NO FLING)
+---------------------------------------------------
 local function tweenTo(position)
 	repeat
 		if not character or not hrp or humanoid.Health <= 0 then
 			task.wait(1)
 		else
-			local distance = (hrp.Position - position).Magnitude
+			local targetCF = CFrame.new(position + Vector3.new(0, 3, 0))
+
+			local distance = (hrp.Position - targetCF.Position).Magnitude
 			local time = distance / SPEED
+
+			-- Disable physics fling
+			hrp.AssemblyLinearVelocity = Vector3.zero
+			hrp.AssemblyAngularVelocity = Vector3.zero
 
 			local tween = TweenService:Create(
 				hrp,
 				TweenInfo.new(time, Enum.EasingStyle.Linear),
 				{
-					CFrame = CFrame.new(position + Vector3.new(0, 3, 0))
+					CFrame = targetCF
 				}
 			)
 
@@ -74,8 +80,15 @@ local function tweenTo(position)
 			end)
 
 			repeat
-				task.wait(0.5)
+				task.wait(0.1)
 
+				-- Stop fling while moving
+				if hrp then
+					hrp.AssemblyLinearVelocity = Vector3.zero
+					hrp.AssemblyAngularVelocity = Vector3.zero
+				end
+
+				-- Died while moving
 				if humanoid.Health <= 0 then
 					tween:Cancel()
 					break
@@ -84,21 +97,35 @@ local function tweenTo(position)
 			until reached
 
 			if reached then
+				-- Final stabilize
+				hrp.CFrame = targetCF
+				hrp.AssemblyLinearVelocity = Vector3.zero
+				hrp.AssemblyAngularVelocity = Vector3.zero
+
 				break
 			end
 		end
 	until false
 end
 
-----------------------------------------------------------------
+---------------------------------------------------
 -- WAIT FOR TICKET FOLDER
-----------------------------------------------------------------
+---------------------------------------------------
 local folder = workspace:WaitForChild("SpinTicketFolder")
 
-----------------------------------------------------------------
+---------------------------------------------------
+-- SORT TICKETS
+---------------------------------------------------
+local tickets = folder:GetChildren()
+
+table.sort(tickets, function(a, b)
+	return a.Name < b.Name
+end)
+
+---------------------------------------------------
 -- COLLECT ALL TICKETS
-----------------------------------------------------------------
-for i, obj in ipairs(folder:GetChildren()) do
+---------------------------------------------------
+for i, obj in ipairs(tickets) do
 	local targetPos
 
 	if obj:IsA("Model") then
@@ -109,14 +136,17 @@ for i, obj in ipairs(folder:GetChildren()) do
 
 	if targetPos then
 		print("Going to:", obj.Name)
+
 		tweenTo(targetPos)
+
+		-- Small delay to ensure collection
 		task.wait(1)
 	end
 end
 
 print("Finished all tickets")
 
-----------------------------------------------------------------
+---------------------------------------------------
 -- TELEPORT BACK TO GAME
-----------------------------------------------------------------
+---------------------------------------------------
 TeleportService:Teleport(PLACE_ID, player)
