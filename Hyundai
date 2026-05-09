@@ -9,7 +9,7 @@ local player = Players.LocalPlayer
 local PLACE_ID = 13457104744
 
 -- SETTINGS
-local SPEED = 120
+local SPEED = 200
 
 ---------------------------------------------------
 -- TELEPORT TO EVENT FIRST
@@ -140,7 +140,7 @@ for i, obj in ipairs(tickets) do
 		tweenTo(targetPos)
 
 		-- Small delay to ensure collection
-		task.wait(1)
+		task.wait(0.5)
 	end
 end
 
