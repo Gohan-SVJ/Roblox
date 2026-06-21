@@ -1,0 +1,354 @@
+local Library = loadstring(Game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/wizard"))()
+
+local PhantomForcesWindow = Library:NewWindow("Egg Finders")
+local KillingCheats = PhantomForcesWindow:NewSection("Main")
+
+KillingCheats:CreateButton("Remove E HoldDuration", function()
+    local ProximityPrompt = workspace.Map["Fusing temple"].Temple.Holder:FindFirstChild("ProximityPrompt")
+    if ProximityPrompt then
+        ProximityPrompt.HoldDuration = 0
+        print("HoldDuration set to 0")
+    else
+        warn("ProximityPrompt not found!")
+    end
+end)
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
+local ESPEnabled = false
+local RenderConnection
+local DrawnObjects = {}
+local Gui
+
+local MAX_DISTANCE = 500
+
+local function GetTorsoScreenPos()
+    local char = Players.LocalPlayer.Character
+    if not char then return nil, nil end
+    local torso = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("Torso")
+    if not torso then return nil, nil end
+    local screenPos, onScreen = Camera:WorldToScreenPoint(torso.Position)
+    if not onScreen then return nil, nil end
+    return Vector2.new(screenPos.X, screenPos.Y), torso.Position
+end
+
+local function ClampToScreen(pos, viewportSize)
+    return Vector2.new(
+        math.clamp(pos.X, 0, viewportSize.X),
+        math.clamp(pos.Y, 0, viewportSize.Y)
+    )
+end
+
+KillingCheats:CreateToggle("ESP Egg", function(value)
+    ESPEnabled = value
+
+    if ESPEnabled then
+        Gui = Instance.new("ScreenGui")
+        Gui.Name = "EggTracerGui"
+        Gui.ResetOnSpawn = false
+        Gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+
+        local RarityColors = {
+            Uncommon  = Color3.fromRGB(0, 255, 0),
+            Rare      = Color3.fromRGB(0, 128, 255),
+            Epic      = Color3.fromRGB(163, 53, 238),
+            Legendary = Color3.fromRGB(255, 215, 0),
+            Mythical  = Color3.fromRGB(255, 0, 0),
+            Ethereal  = Color3.fromRGB(170, 0, 255),
+            Shiny     = Color3.fromRGB(229, 228, 226),
+            UGC       = Color3.fromRGB(255, 128, 0),
+            Ascended  = Color3.fromRGB(255, 255, 255),
+            ["???"]   = Color3.fromRGB(0, 255, 200),
+        }
+
+        local RarityNames = {
+            Uncommon  = {"Rock", "Grumpy", "Gift", "Inverted", "Fish", "DIY", "Cracked", "Snailegg", "Iron", "Uniegg", "Cobblegg", "Bucket Egg", "Doodle", 
+                "Tomategg", "Sherif Egg", "Cablegg"},
+            Rare      = {"Colorful", "Sategg", "Dino", "Hamptegg", "Noob", "Brewegg", "Moon", "Melon", "Space", "Seal", "Ghost", "Rocket", "Mouse", "Antegg", "Camelegg", 
+                "Beach Ball", "Lamp", "Toadegg", "Shroomegg", "Snakegg", "Cactegg", "Copper", "Guestegg", "Chest Egg", "Oilegg", "Shrimpegg"},
+            Epic      = {"Ash", "Chikegg", "Dinegg", "Fire", "Plant", "Chocolate", "Tabby", "Lampegg", "Clock", "Wategg", "Dugk", "Egg Mimic", "Craftingtablegg", "Scorpiegg", 
+                "Spikegg", "Anvlegg", "Hammer Egg", "Battregg", "Lotus Egg", "Bomb"},
+            Legendary = {"Angry", "Frogg", "Bee", "Pull", "Eg", "Paintegg", "Seedlegg", "Core", "Wild", "Magma", "Cheese", "Corrupted", "Banana", "Electricitegg", 
+                "Orangegg", "Sun", "Limegg", "Diamond", "Computegg", "Heategg", "Stary", "Island", "Puffer Egg", "Glue", "4 Dimensional", "Lagegg", "Meteoregg", "Cloudegg", 
+                "Poison", "Trollegg", "Sand Wormegg"},
+            Mythical  = {"Eggday", "Ice", "Appegg", "CartRide", "Crabegg", "Blueberregg", "RoEgg", "Golden", "Squid", "Holy", "Paradox", "Super Ghost", "DogEgg", "Hermit Egg", "Impegg", 
+                "EggDroid 2017", "CocoEgg", "Futuristegg", "Odd Egg", "Soretro", "Platinium", "Oasis", "Pharaoh"},
+            Ethereal  = {"Layered", "Burger", "Blackhole", "Ruby", "Infinitegg", "Zen", "Darkness", "Sapphire", "Ruby Faberge", "Royal", "Illusion", "Matterless", 
+                "God", "Dragonic", "Dragonfruit", "Nuclear Egg", "Floppegg", "H@ACK \194\163GG", "Rage", "Ancient Egg", "NUKE", "Corrupted", "Inferno"},
+            Shiny     = {"Shiny Egg", "Shiny Grass", "Shiny Corroded", "Shiny Glass", "Shiny Fish", "Shiny Iron", "Shiny Ghost", "Shiny Fire", "Shiny Wategg", "Shiny Blueberregg", 
+                "Shiny Golden", "Shiny Seraphim"},
+            UGC       = {"Relic"},
+            Ascended  = {"Seraphim", "Unknown"},
+            ["???"]   = {"Quantum", "ERR0R", "Malware", "Endless", "Dark Matter"},
+        }
+
+        local function GetRarity(name)
+            for rarity, nameList in pairs(RarityNames) do
+                for _, n in ipairs(nameList) do
+                    if n == name then return rarity end
+                end
+            end
+            return nil
+        end
+
+        local function CreateTracer()
+            local frame = Instance.new("Frame")
+            frame.Name = "TracerLine"
+            frame.AnchorPoint = Vector2.new(0.5, 0.5)
+            frame.BorderSizePixel = 0
+            frame.BackgroundTransparency = 0
+            frame.ZIndex = 10
+            frame.Parent = Gui
+
+            local label = Instance.new("TextLabel")
+            label.Name = "RarityLabel"
+            label.AnchorPoint = Vector2.new(0.5, 0)
+            label.BackgroundTransparency = 1
+            label.Size = UDim2.new(0, 140, 0, 16)
+            label.Font = Enum.Font.SourceSansBold
+            label.TextSize = 14
+            label.TextStrokeTransparency = 0.5
+            label.Text = ""
+            label.ZIndex = 11
+            label.Parent = Gui
+
+            return {Line = frame, Label = label}
+        end
+
+        local function SetTracer(tracer, origin, dest, color, text)
+            local midpoint = (origin + dest) / 2
+            local length = (origin - dest).Magnitude
+
+            tracer.Line.Position = UDim2.new(0, midpoint.X, 0, midpoint.Y)
+            tracer.Line.Size = UDim2.new(0, length, 0, 2)
+            tracer.Line.Rotation = math.deg(math.atan2(dest.Y - origin.Y, dest.X - origin.X))
+            tracer.Line.BackgroundColor3 = color
+            tracer.Line.Visible = true
+
+            tracer.Label.Position = UDim2.new(0, dest.X, 0, dest.Y)
+            tracer.Label.TextColor3 = color
+            tracer.Label.Text = text
+            tracer.Label.Visible = true
+        end
+
+        local function HideTracer(tracer)
+            tracer.Line.Visible = false
+            tracer.Label.Visible = false
+        end
+
+        RenderConnection = RunService.RenderStepped:Connect(function()
+            local viewportSize = Camera.ViewportSize
+            local activeCount = 0
+
+            local torsoScreenPos, torsoWorldPos = GetTorsoScreenPos()
+
+            -- Nếu torso không trong camera view thì bỏ qua frame này
+            if not torsoScreenPos or not torsoWorldPos then
+                for i = 1, #DrawnObjects do
+                    if DrawnObjects[i] then HideTracer(DrawnObjects[i]) end
+                end
+                return
+            end
+
+            local lineOrigin = ClampToScreen(torsoScreenPos, viewportSize)
+
+            local Eggs = workspace:FindFirstChild("Eggs")
+            if Eggs then
+                for _, obj in pairs(Eggs:GetChildren()) do
+                    local name = obj.Name
+                    local rarity = GetRarity(name)
+                    if rarity then
+                        local meshPart = nil
+                        if obj:IsA("Model") then
+                            meshPart = obj:FindFirstChild("Main")
+                        elseif obj:IsA("MeshPart") then
+                            meshPart = obj
+                        end
+
+                        if meshPart then
+                            -- Khoảng cách check
+                            local dist = (meshPart.Position - torsoWorldPos).Magnitude
+                            if dist > MAX_DISTANCE then continue end
+
+                            -- Chỉ vẽ nếu egg thật sự trong camera view
+                            local screenPos, onScreen = Camera:WorldToScreenPoint(meshPart.Position)
+                            if not onScreen then continue end
+
+                            local destPos = Vector2.new(screenPos.X, screenPos.Y)
+
+                            activeCount += 1
+                            if not DrawnObjects[activeCount] then
+                                DrawnObjects[activeCount] = CreateTracer()
+                            end
+
+                            local tracer = DrawnObjects[activeCount]
+                            local color = RarityColors[rarity]
+                            local distLabel = " [" .. math.floor(dist) .. "]"
+                            SetTracer(tracer, lineOrigin, destPos, color, rarity .. distLabel)
+                        end
+                    end
+                end
+            end
+
+            -- Ẩn tracer không dùng
+            for i = activeCount + 1, #DrawnObjects do
+                if DrawnObjects[i] then HideTracer(DrawnObjects[i]) end
+            end
+        end)
+
+    else
+        if RenderConnection then
+            RenderConnection:Disconnect()
+            RenderConnection = nil
+        end
+        for _, obj in pairs(DrawnObjects) do
+            if obj and obj.Line then obj.Line:Destroy() end
+            if obj and obj.Label then obj.Label:Destroy() end
+        end
+        DrawnObjects = {}
+        if Gui then Gui:Destroy() Gui = nil end
+    end
+end)
+
+local player = game.Players.LocalPlayer
+
+-- Default speed
+local defaultSpeed = 16
+local boostedSpeed = 24
+
+-- Function to change the character speed
+local function changeSpeed(newSpeed)
+    -- Wait for the character to load
+    local character = player.Character or player.CharacterAdded:Wait()
+    
+    -- Wait for the Humanoid to be available
+    local humanoid = character:WaitForChild("Humanoid")
+    
+    -- Change the WalkSpeed
+    humanoid.WalkSpeed = newSpeed
+end
+
+-- Create a toggle for speed
+KillingCheats:CreateToggle("Speed", function(value)
+    if value then
+        -- If toggle is on, set speed to boostedSpeed
+        changeSpeed(boostedSpeed)
+    else
+        -- If toggle is off, reset speed to defaultSpeed
+        changeSpeed(defaultSpeed)
+    end
+end)
+
+KillingCheats:CreateButton("Speedy Notification", function()
+local StarterGui = game:GetService("StarterGui")
+
+StarterGui:SetCore("SendNotification", {
+    Title = "SPEED ALERT!!";
+    Text = "Dont Change Your Speed > 24 or you will get kicked";
+    Duration = 5;
+})
+end)
+
+local KillingCheats = PhantomForcesWindow:NewSection("Misc")
+
+KillingCheats:CreateButton("Server Hop", function()
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+
+local PlaceId = game.PlaceId
+local JobId = game.JobId
+
+-- Ensure http request function is supported
+if typeof(httprequest) == "function" or typeof(request) == "function" then
+    local requestFunc = httprequest or request
+
+    local success, response = pcall(function()
+        return requestFunc({
+            Url = string.format("https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Desc&limit=100&excludeFullGames=true", PlaceId)
+        })
+    end)
+
+    if success and response then
+        local body = HttpService:JSONDecode(response.Body)
+        local servers = {}
+
+        if body and body.data then
+            for _, server in ipairs(body.data) do
+                if server and server.id and server.playing and server.maxPlayers then
+                    if tonumber(server.playing) < tonumber(server.maxPlayers) and server.id ~= JobId then
+                        table.insert(servers, server.id)
+                    end
+                end
+            end
+        end
+
+        if #servers > 0 then
+            TeleportService:TeleportToPlaceInstance(PlaceId, servers[math.random(1, #servers)], Players.LocalPlayer)
+        else
+            if notify then
+                notify("Serverhop", "Couldn't find a server.")
+            end
+        end
+    else
+        if notify then
+            notify("Serverhop", "Failed to fetch server list.")
+        end
+    end
+else
+    if notify then
+        notify("Incompatible Exploit", "Your exploit does not support http requests.")
+    end
+end
+end)
+
+KillingCheats:CreateButton("Rejoin", function()
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local placeId = game.PlaceId
+
+-- Immediately rejoin the current game
+TeleportService:Teleport(placeId, player)
+end)
+
+KillingCheats:CreateButton("Anti-Afk", function()
+loadstring(game:HttpGet("https://pastefy.app/DzCeor9r/raw",true))()
+end)
+
+KillingCheats:CreateButton("Server Info", function()
+loadstring(game:HttpGet("https://pastefy.app/olPh0bXp/raw",true))()
+end)
+
+local PhantomForcesWindow = Library:NewWindow("Social Media")
+
+local KillingCheats = PhantomForcesWindow:NewSection("Credit: sunnii_mylife")
+
+KillingCheats:CreateButton("Youtube", function()
+        local StarterGui = game:GetService("StarterGui")
+
+StarterGui:SetCore("SendNotification", {
+    Title = "Youtube";
+    Text = "Link Has Been Copied To Your Clipboard";
+	Icon = "rbxassetid://95443244685204";
+    Duration = 5;
+})
+    setclipboard("https://www.youtube.com/@GodLebity")
+    print("Link copied to clipboard!")
+end)
+
+KillingCheats:CreateButton("Discord", function()
+        local StarterGui = game:GetService("StarterGui")
+
+StarterGui:SetCore("SendNotification", {
+    Title = "Discord";
+    Text = "Link Has Been Copied To Your Clipboard";
+	Icon = "rbxassetid://95443244685204";
+    Duration = 5;
+})
+        
+    setclipboard("https://discord.gg/TNGbDMCR")
+    print("Link copied to clipboard!")
+end)
