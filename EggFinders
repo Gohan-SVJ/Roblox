@@ -4,7 +4,7 @@ local PhantomForcesWindow = Library:NewWindow("Egg Finders")
 local KillingCheats = PhantomForcesWindow:NewSection("Main")
 
 KillingCheats:CreateButton("Remove E HoldDuration", function()
-    local ProximityPrompt = workspace.Map["Fusing temple"].Temple.Holder:FindFirstChild("ProximityPrompt")
+    local ProximityPrompt = workspace.StatueBlessing.HumanoidRootPart:FindFirstChild("ProximityPrompt")
     if ProximityPrompt then
         ProximityPrompt.HoldDuration = 0
         print("HoldDuration set to 0")
