@@ -1,34 +1,300 @@
 local Library = loadstring(Game:HttpGet("https://raw.githubusercontent.com/bloodball/-back-ups-for-libs/main/wizard"))()
 
 local PhantomForcesWindow = Library:NewWindow("Egg Finders")
+
 local KillingCheats = PhantomForcesWindow:NewSection("Main")
 
-KillingCheats:CreateButton("Remove E HoldDuration", function()
-    local ProximityPrompt = workspace.Map["Fusing temple"].Temple.Holder:FindFirstChild("ProximityPrompt")
-    if ProximityPrompt then
-        ProximityPrompt.HoldDuration = 0
-        print("HoldDuration set to 0")
-    else
-        warn("ProximityPrompt not found!")
-    end
-end)
-
-KillingCheats:CreateButton("Clean World2", function()
+KillingCheats:CreateButton("Clean World 2", function()
     local World2 = workspace:FindFirstChild("World2")
-    if not World2 then
-        warn("World2 not found!")
+    local Desert = workspace:FindFirstChild("World2Model") and workspace.World2Model:FindFirstChild("Desert")
+    if not World2 and not Desert then
+        warn("Neither World2 nor Desert found!")
         return
     end
-
     local count = 0
-    for _, child in pairs(World2:GetChildren()) do
-        if child.Name ~= "Index" then
-            child:Destroy()
+    if World2 then
+        for _, child in pairs(World2:GetChildren()) do
+            if child.Name ~= "Index" then
+                child:Destroy()
+                count += 1
+            end
+        end
+    end
+    if Desert then
+        for _, child in pairs(Desert:GetChildren()) do
+            if child.Name ~= "Ground" then
+                child:Destroy()
+                count += 1
+            end
+        end
+    end
+    -- Destroy workspace.World2.Index.Model
+    local IndexModel = World2 and World2:FindFirstChild("Index") and World2.Index:FindFirstChild("Model")
+    if IndexModel then
+        IndexModel:Destroy()
+        count += 1
+    end
+    -- Destroy workspace.Billboard
+    local Billboard = workspace:FindFirstChild("Billboard")
+    if Billboard then
+        Billboard:Destroy()
+        count += 1
+    end
+    -- Destroy workspace.secret children
+    local Secret = workspace:FindFirstChild("secret")
+    if Secret then
+        local GraveStand = Secret:FindFirstChild("GraveStand")
+        if GraveStand then
+            GraveStand:Destroy()
             count += 1
+        end
+        local Grave = Secret:FindFirstChild("Grave")
+        if Grave then
+            Grave:Destroy()
+            count += 1
+        end
+        -- Destroy all instances named "a" inside workspace.secret
+        for _, child in pairs(Secret:GetChildren()) do
+            if child.Name == "a" then
+                child:Destroy()
+                count += 1
+            end
+        end
+    end
+    print("Cleaned: removed " .. count .. " objects")
+end)
+
+local Players = game:GetService("Players")
+local PathfindingService = game:GetService("PathfindingService")
+
+local player = Players.LocalPlayer
+
+local CommonEggs = {
+    "Yellow",
+    "Dried Grassegg",
+    "Brown",
+    "Whool",
+    "Clamegg",
+    "Sand",
+    "Music",
+    "Studed",
+    "Paper Egg"
+}
+
+local autoRaiseActive = false
+
+local character
+local humanoid
+local hrp
+
+local function refreshCharacter()
+    character = player.Character or player.CharacterAdded:Wait()
+    humanoid = character:WaitForChild("Humanoid")
+    hrp = character:WaitForChild("HumanoidRootPart")
+end
+
+refreshCharacter()
+
+player.CharacterAdded:Connect(function()
+    task.wait(1)
+    refreshCharacter()
+end)
+
+local function isCommonEgg(name)
+    for _, eggName in ipairs(CommonEggs) do
+        if eggName == name then
+            return true
+        end
+    end
+    return false
+end
+
+local function getNearestEgg()
+    local eggsFolder = workspace:FindFirstChild("Eggs")
+    if not eggsFolder then
+        return nil
+    end
+
+    local nearest
+    local nearestDist = math.huge
+
+    for _, egg in ipairs(eggsFolder:GetChildren()) do
+        if isCommonEgg(egg.Name) then
+            local dist = (hrp.Position - egg:GetPivot().Position).Magnitude
+
+            if dist < nearestDist then
+                nearestDist = dist
+                nearest = egg
+            end
         end
     end
 
-    print("Cleaned World2: removed " .. count .. " objects")
+    return nearest
+end
+
+local function pathfindTo(destination, reachDistance)
+    reachDistance = reachDistance or 4
+
+    local path = PathfindingService:CreatePath({
+        AgentRadius = 2,
+        AgentHeight = 5,
+        AgentCanJump = true,
+        AgentCanClimb = true
+    })
+
+    local success = pcall(function()
+        path:ComputeAsync(hrp.Position, destination)
+    end)
+
+    if not success then
+        return false
+    end
+
+    if path.Status ~= Enum.PathStatus.Success then
+        return false
+    end
+
+    local waypoints = path:GetWaypoints()
+
+    for _, waypoint in ipairs(waypoints) do
+
+        if not autoRaiseActive then
+            return false
+        end
+
+        humanoid:MoveTo(waypoint.Position)
+
+        if waypoint.Action == Enum.PathWaypointAction.Jump then
+            humanoid.Jump = true
+        end
+
+        local reached = false
+
+        local conn
+        conn = humanoid.MoveToFinished:Connect(function(success)
+            reached = true
+        end)
+
+        local startTime = tick()
+
+        repeat
+            task.wait()
+
+            if (hrp.Position - destination).Magnitude <= reachDistance then
+                conn:Disconnect()
+                return true
+            end
+
+        until reached or tick() - startTime > 3
+
+        conn:Disconnect()
+    end
+
+    return (hrp.Position - destination).Magnitude <= reachDistance
+end
+
+local function activateStatue()
+    local statue = workspace:FindFirstChild("StatueBlessing")
+    if not statue then
+        return
+    end
+
+    local statueHRP = statue:FindFirstChild("HumanoidRootPart")
+    if not statueHRP then
+        return
+    end
+
+    local pp = statueHRP:FindFirstChild("ProximityPrompt")
+    if not pp then
+        return
+    end
+
+    print("Moving to statue...")
+
+    local reached = pathfindTo(
+        statueHRP.Position,
+        math.max(2, pp.MaxActivationDistance - 1)
+    )
+
+    if not reached then
+        warn("Failed to reach statue")
+        return
+    end
+
+    local distance = (hrp.Position - statueHRP.Position).Magnitude
+
+    print("Distance To Statue:", distance)
+
+    if distance <= pp.MaxActivationDistance then
+        print("Fire Prompt")
+        fireproximityprompt(pp)
+    end
+end
+
+local function autoRaiseLoop()
+    while autoRaiseActive do
+
+        refreshCharacter()
+
+        local egg = getNearestEgg()
+
+        if not egg then
+            task.wait(0.5)
+            continue
+        end
+
+        print("Target Egg:", egg.Name)
+
+        local eggPos = egg:GetPivot().Position
+
+        local reachedEgg = pathfindTo(eggPos, 4)
+
+        if not reachedEgg then
+            warn("Failed to reach egg")
+            task.wait(0.5)
+            continue
+        end
+
+        local cd = egg:FindFirstChildOfClass("ClickDetector")
+
+        if cd then
+            fireclickdetector(cd)
+            print("Egg Clicked")
+        end
+
+        task.wait(0.2)
+
+        activateStatue()
+
+        task.wait(0.2)
+    end
+end
+
+KillingCheats:CreateToggle("Auto raise luck", function(state)
+
+    autoRaiseActive = state
+
+    if state then
+
+        local statue = workspace:FindFirstChild("StatueBlessing")
+
+        if statue and statue:FindFirstChild("HumanoidRootPart") then
+            local pp = statue.HumanoidRootPart:FindFirstChild("ProximityPrompt")
+
+            if pp then
+                pcall(function()
+                    pp.HoldDuration = 0
+                end)
+            end
+        end
+
+        task.spawn(autoRaiseLoop)
+
+        print("Auto Raise Luck: ON")
+
+    else
+        print("Auto Raise Luck: OFF")
+    end
 end)
 
 local RunService = game:GetService("RunService")
