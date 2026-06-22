@@ -4,13 +4,31 @@ local PhantomForcesWindow = Library:NewWindow("Egg Finders")
 local KillingCheats = PhantomForcesWindow:NewSection("Main")
 
 KillingCheats:CreateButton("Remove E HoldDuration", function()
-    local ProximityPrompt = workspace.StatueBlessing.HumanoidRootPart:FindFirstChild("ProximityPrompt")
+    local ProximityPrompt = workspace.Map["Fusing temple"].Temple.Holder:FindFirstChild("ProximityPrompt")
     if ProximityPrompt then
         ProximityPrompt.HoldDuration = 0
         print("HoldDuration set to 0")
     else
         warn("ProximityPrompt not found!")
     end
+end)
+
+KillingCheats:CreateButton("Clean World2", function()
+    local World2 = workspace:FindFirstChild("World2")
+    if not World2 then
+        warn("World2 not found!")
+        return
+    end
+
+    local count = 0
+    for _, child in pairs(World2:GetChildren()) do
+        if child.Name ~= "Index" then
+            child:Destroy()
+            count += 1
+        end
+    end
+
+    print("Cleaned World2: removed " .. count .. " objects")
 end)
 
 local RunService = game:GetService("RunService")
@@ -21,7 +39,7 @@ local RenderConnection
 local DrawnObjects = {}
 local Gui
 
-local MAX_DISTANCE = 500
+local MAX_DISTANCE = 600
 
 local function GetTorsoScreenPos()
     local char = Players.LocalPlayer.Character
