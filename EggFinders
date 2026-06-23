@@ -65,9 +65,11 @@ KillingCheats:CreateButton("Clean World 2", function()
 end)
 
 local Players = game:GetService("Players")
-local PathfindingService = game:GetService("PathfindingService")
 
 local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
 
 local CommonEggs = {
     "Yellow",
@@ -83,26 +85,21 @@ local CommonEggs = {
 
 local autoRaiseActive = false
 
-local character
-local humanoid
-local hrp
-
 local function refreshCharacter()
-    character = player.Character or player.CharacterAdded:Wait()
-    humanoid = character:WaitForChild("Humanoid")
-    hrp = character:WaitForChild("HumanoidRootPart")
+    character = player.Character
+    if not character then
+        return false
+    end
+
+    humanoid = character:FindFirstChild("Humanoid")
+    hrp = character:FindFirstChild("HumanoidRootPart")
+
+    return humanoid and hrp
 end
 
-refreshCharacter()
-
-player.CharacterAdded:Connect(function()
-    task.wait(1)
-    refreshCharacter()
-end)
-
 local function isCommonEgg(name)
-    for _, eggName in ipairs(CommonEggs) do
-        if eggName == name then
+    for _, v in ipairs(CommonEggs) do
+        if v == name then
             return true
         end
     end
@@ -115,126 +112,95 @@ local function getNearestEgg()
         return nil
     end
 
-    local nearest
-    local nearestDist = math.huge
+    local nearestEgg
+    local nearestDistance = math.huge
 
     for _, egg in ipairs(eggsFolder:GetChildren()) do
         if isCommonEgg(egg.Name) then
             local dist = (hrp.Position - egg:GetPivot().Position).Magnitude
 
-            if dist < nearestDist then
-                nearestDist = dist
-                nearest = egg
+            if dist < nearestDistance then
+                nearestDistance = dist
+                nearestEgg = egg
             end
         end
     end
 
-    return nearest
+    return nearestEgg
 end
 
-local function pathfindTo(destination, reachDistance)
-    reachDistance = reachDistance or 4
+local function walkTo(position, threshold, timeout)
+    threshold = threshold or 4
+    timeout = timeout or 8
 
-    local path = PathfindingService:CreatePath({
-        AgentRadius = 2,
-        AgentHeight = 5,
-        AgentCanJump = true,
-        AgentCanClimb = true
-    })
+    humanoid:MoveTo(position)
 
-    local success = pcall(function()
-        path:ComputeAsync(hrp.Position, destination)
-    end)
+    local start = tick()
 
-    if not success then
-        return false
-    end
+    repeat
+        task.wait(0.1)
 
-    if path.Status ~= Enum.PathStatus.Success then
-        return false
-    end
+        local dist = (hrp.Position - position).Magnitude
 
-    local waypoints = path:GetWaypoints()
-
-    for _, waypoint in ipairs(waypoints) do
-
-        if not autoRaiseActive then
-            return false
+        if dist <= threshold then
+            humanoid:MoveTo(hrp.Position)
+            return true
         end
 
-        humanoid:MoveTo(waypoint.Position)
+    until tick() - start >= timeout
 
-        if waypoint.Action == Enum.PathWaypointAction.Jump then
-            humanoid.Jump = true
-        end
-
-        local reached = false
-
-        local conn
-        conn = humanoid.MoveToFinished:Connect(function(success)
-            reached = true
-        end)
-
-        local startTime = tick()
-
-        repeat
-            task.wait()
-
-            if (hrp.Position - destination).Magnitude <= reachDistance then
-                conn:Disconnect()
-                return true
-            end
-
-        until reached or tick() - startTime > 3
-
-        conn:Disconnect()
-    end
-
-    return (hrp.Position - destination).Magnitude <= reachDistance
+    humanoid:MoveTo(hrp.Position)
+    return false
 end
 
 local function activateStatue()
     local statue = workspace:FindFirstChild("StatueBlessing")
     if not statue then
-        return
+        warn("StatueBlessing not found")
+        return false
     end
 
     local statueHRP = statue:FindFirstChild("HumanoidRootPart")
     if not statueHRP then
-        return
+        warn("Statue HRP not found")
+        return false
     end
 
     local pp = statueHRP:FindFirstChild("ProximityPrompt")
     if not pp then
-        return
+        warn("Prompt not found")
+        return false
     end
 
-    print("Moving to statue...")
+    print("===== STATUE PHASE =====")
 
-    local reached = pathfindTo(
+    local reached = walkTo(
         statueHRP.Position,
-        math.max(2, pp.MaxActivationDistance - 1)
+        math.max(2, pp.MaxActivationDistance - 1),
+        8
     )
-
-    if not reached then
-        warn("Failed to reach statue")
-        return
-    end
 
     local distance = (hrp.Position - statueHRP.Position).Magnitude
 
     print("Distance To Statue:", distance)
 
-    if distance <= pp.MaxActivationDistance then
-        print("Fire Prompt")
+    if reached and distance <= pp.MaxActivationDistance then
+        print("In range -> Fire Prompt")
         fireproximityprompt(pp)
+        return true
     end
+
+    warn("Could not reach statue. Prompt skipped.")
+    return false
 end
 
 local function autoRaiseLoop()
     while autoRaiseActive do
 
-        refreshCharacter()
+        if not refreshCharacter() then
+            task.wait(1)
+            continue
+        end
 
         local egg = getNearestEgg()
 
@@ -243,35 +209,43 @@ local function autoRaiseLoop()
             continue
         end
 
-        print("Target Egg:", egg.Name)
-
         local eggPos = egg:GetPivot().Position
 
-        local reachedEgg = pathfindTo(eggPos, 4)
+        print("---------------------")
+        print("Egg:", egg.Name)
+
+        local reachedEgg = walkTo(eggPos, 4, 6)
 
         if not reachedEgg then
-            warn("Failed to reach egg")
-            task.wait(0.5)
+            warn("Could not reach egg")
             continue
         end
+
+        task.wait(0.15)
 
         local cd = egg:FindFirstChildOfClass("ClickDetector")
 
         if cd then
+            print("Click Egg")
             fireclickdetector(cd)
-            print("Egg Clicked")
+        else
+            warn("ClickDetector not found")
+            continue
         end
 
-        task.wait(0.2)
+        task.wait(0.25)
+
+        if not autoRaiseActive then
+            break
+        end
 
         activateStatue()
 
-        task.wait(0.2)
+        task.wait(0.3)
     end
 end
 
-KillingCheats:CreateToggle("Auto raise luck", function(state)
-
+KillingCheats:CreateToggle("Auto Raise Luck", function(state)
     autoRaiseActive = state
 
     if state then
@@ -293,6 +267,19 @@ KillingCheats:CreateToggle("Auto raise luck", function(state)
         print("Auto Raise Luck: ON")
 
     else
+
+        local statue = workspace:FindFirstChild("StatueBlessing")
+
+        if statue and statue:FindFirstChild("HumanoidRootPart") then
+            local pp = statue.HumanoidRootPart:FindFirstChild("ProximityPrompt")
+
+            if pp then
+                pcall(function()
+                    pp.HoldDuration = 1.5
+                end)
+            end
+        end
+
         print("Auto Raise Luck: OFF")
     end
 end)
