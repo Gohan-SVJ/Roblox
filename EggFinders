@@ -65,28 +65,218 @@ KillingCheats:CreateButton("Clean World 2", function()
 end)
 
 local Players = game:GetService("Players")
+local autoRaiseActive = false
+local pauseAutoRaise = false
+local autoRaiseRunning = false
 
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local hrp = character:WaitForChild("HumanoidRootPart")
 
-local CommonEggs = {
-    "Yellow",
-    "Dried Grassegg",
-    "Brown",
-    "Whool",
-    "Clamegg",
-    "Sand",
-    "Music",
-    "Studed",
-    "Paper Egg"
+local RaiseEggs = {
+
+    Rare = {
+        "Colorful","Sategg","Dino","Hamptegg","Noob",
+        "Brewegg","Moon","Melon","Space","Seal",
+        "Ghost","Rocket","Mouse","Antegg","Camelegg",
+        "Beach Ball","Lamp","Toadegg","Shroomegg",
+        "Snakegg","Cactegg","Copper","Guestegg",
+        "Chest Egg","Oilegg","Shrimpegg"
+    },
+
+    Uncommon = {
+        "Rock","Grumpy","Gift","Inverted","Fish",
+        "DIY","Cracked","Snailegg","Iron","Uniegg",
+        "Cobblegg","Bucket Egg","Doodle","Tomategg",
+        "Sherif Egg","Cablegg"
+    },
+
+    Common = {
+        "Yellow","Dried Grassegg","Brown","Whool",
+        "Clamegg","Sand","Music","Studed","Paper Egg"
+    }
 }
 
-local autoRaiseActive = false
+local RaiseOrder = {
+    "Rare",
+    "Uncommon",
+    "Common"
+}
+
+local LastCollectedEgg = nil
+local CarryingEgg = false
+
+local function isTakenEgg(egg)
+
+    if egg == LastCollectedEgg then
+        return true
+    end
+
+    if egg:FindFirstChildWhichIsA("RopeConstraint", true) then
+        return true
+    end
+
+    return false
+end
+
+local function getNearestEgg()
+
+    local eggsFolder = workspace:FindFirstChild("Eggs")
+
+    if not eggsFolder then
+        return nil
+    end
+
+    for _, rarity in ipairs(RaiseOrder) do
+
+        local bestEgg
+        local bestDistance = math.huge
+
+        for _, eggName in ipairs(RaiseEggs[rarity]) do
+
+            for _, egg in ipairs(eggsFolder:GetChildren()) do
+
+                if egg.Name == eggName
+                and not isTakenEgg(egg) then
+
+                    local distance =
+                        (hrp.Position - egg:GetPivot().Position).Magnitude
+
+                    if distance <= 600
+                    and distance < bestDistance then
+
+                        bestDistance = distance
+                        bestEgg = egg
+                    end
+                end
+            end
+        end
+
+        if bestEgg then
+
+            print(
+                "[Auto Raise]",
+                rarity,
+                bestEgg.Name,
+                math.floor(bestDistance) .. " studs"
+            )
+
+            return bestEgg
+        end
+    end
+
+    return nil
+end
+
+local function walkTo(position, threshold, timeout)
+
+    threshold = threshold or 4
+    timeout = timeout or 8
+
+    local start = tick()
+
+    while tick() - start < timeout do
+
+        humanoid:MoveTo(position)
+
+        local dist =
+            (hrp.Position - position).Magnitude
+
+        if dist <= threshold then
+
+            humanoid:MoveTo(hrp.Position)
+
+            return true
+        end
+
+        task.wait(0.15)
+    end
+
+    humanoid:MoveTo(hrp.Position)
+
+    return false
+end
+
+local function activateStatue()
+
+    local statue =
+        workspace:FindFirstChild("StatueBlessing")
+
+    if not statue then
+        return false
+    end
+
+    local statueHRP =
+        statue:FindFirstChild("HumanoidRootPart")
+
+    if not statueHRP then
+        return false
+    end
+
+    local pp =
+        statueHRP:FindFirstChild("ProximityPrompt")
+
+    if not pp then
+        return false
+    end
+
+    print("===== STATUE PHASE =====")
+
+    humanoid:MoveTo(statueHRP.Position)
+
+    local lastDistance = math.huge
+
+    while CarryingEgg
+        and autoRaiseActive
+        and not pauseAutoRaise do
+
+        local distance =
+            (hrp.Position -
+            statueHRP.Position).Magnitude
+
+        if math.abs(distance - lastDistance) > 10 then
+
+            print(
+                "Distance To Statue:",
+                math.floor(distance)
+            )
+
+            lastDistance = distance
+        end
+
+        if distance <= pp.MaxActivationDistance then
+
+            humanoid:MoveTo(hrp.Position)
+
+            print("In range -> Fire Prompt")
+
+            fireproximityprompt(pp)
+
+            CarryingEgg = false
+            LastCollectedEgg = nil
+
+            return true
+        end
+
+        -- chỉ MoveTo lại nếu bị đứng yên
+        if humanoid.MoveDirection.Magnitude < 0.05 then
+
+            humanoid:MoveTo(
+                statueHRP.Position
+            )
+
+        end
+
+        task.wait(0.1)
+    end
+
+    return false
+end
 
 local function refreshCharacter()
     character = player.Character
+
     if not character then
         return false
     end
@@ -97,192 +287,452 @@ local function refreshCharacter()
     return humanoid and hrp
 end
 
-local function isCommonEgg(name)
-    for _, v in ipairs(CommonEggs) do
-        if v == name then
-            return true
-        end
-    end
-    return false
-end
-
-local function getNearestEgg()
-    local eggsFolder = workspace:FindFirstChild("Eggs")
-    if not eggsFolder then
-        return nil
-    end
-
-    local nearestEgg
-    local nearestDistance = math.huge
-
-    for _, egg in ipairs(eggsFolder:GetChildren()) do
-        if isCommonEgg(egg.Name) then
-            local dist = (hrp.Position - egg:GetPivot().Position).Magnitude
-
-            if dist < nearestDistance then
-                nearestDistance = dist
-                nearestEgg = egg
-            end
-        end
-    end
-
-    return nearestEgg
-end
-
-local function walkTo(position, threshold, timeout)
-    threshold = threshold or 4
-    timeout = timeout or 8
-
-    humanoid:MoveTo(position)
-
-    local start = tick()
-
-    repeat
-        task.wait(0.1)
-
-        local dist = (hrp.Position - position).Magnitude
-
-        if dist <= threshold then
-            humanoid:MoveTo(hrp.Position)
-            return true
-        end
-
-    until tick() - start >= timeout
-
-    humanoid:MoveTo(hrp.Position)
-    return false
-end
-
-local function activateStatue()
-    local statue = workspace:FindFirstChild("StatueBlessing")
-    if not statue then
-        warn("StatueBlessing not found")
-        return false
-    end
-
-    local statueHRP = statue:FindFirstChild("HumanoidRootPart")
-    if not statueHRP then
-        warn("Statue HRP not found")
-        return false
-    end
-
-    local pp = statueHRP:FindFirstChild("ProximityPrompt")
-    if not pp then
-        warn("Prompt not found")
-        return false
-    end
-
-    print("===== STATUE PHASE =====")
-
-    local reached = walkTo(
-        statueHRP.Position,
-        math.max(2, pp.MaxActivationDistance - 1),
-        8
-    )
-
-    local distance = (hrp.Position - statueHRP.Position).Magnitude
-
-    print("Distance To Statue:", distance)
-
-    if reached and distance <= pp.MaxActivationDistance then
-        print("In range -> Fire Prompt")
-        fireproximityprompt(pp)
-        return true
-    end
-
-    warn("Could not reach statue. Prompt skipped.")
-    return false
-end
-
 local function autoRaiseLoop()
+
+    if autoRaiseRunning then
+        return
+    end
+
+    autoRaiseRunning = true
+
     while autoRaiseActive do
+
+        if pauseAutoRaise then
+            task.wait(0.1)
+            continue
+        end
 
         if not refreshCharacter() then
             task.wait(1)
             continue
         end
 
-        local egg = getNearestEgg()
+        if CarryingEgg then
+
+    activateStatue()
+
+    task.wait(0.2)
+
+    continue
+end
+
+local egg = getNearestEgg()
+
+if not egg then
+    task.wait(0.2)
+    continue
+end
 
         if not egg then
-            task.wait(0.5)
+            task.wait(0.2)
             continue
         end
-
-        local eggPos = egg:GetPivot().Position
 
         print("---------------------")
         print("Egg:", egg.Name)
 
-        local reachedEgg = walkTo(eggPos, 4, 6)
+        local eggPos = egg:GetPivot().Position
+
+        local reachedEgg = walkTo(
+            eggPos,
+            3,
+            5
+        )
+
+        if pauseAutoRaise then
+            continue
+        end
 
         if not reachedEgg then
-            warn("Could not reach egg")
             continue
         end
 
-        task.wait(0.15)
+        local eggDist =
+            (hrp.Position - egg:GetPivot().Position).Magnitude
 
-        local cd = egg:FindFirstChildOfClass("ClickDetector")
-
-        if cd then
-            print("Click Egg")
-            fireclickdetector(cd)
-        else
-            warn("ClickDetector not found")
+        if eggDist > 8 then
             continue
         end
 
-        task.wait(0.25)
+        local cd =
+            egg:FindFirstChildOfClass("ClickDetector")
 
-        if not autoRaiseActive then
-            break
+        if not cd then
+            continue
         end
 
-        activateStatue()
+        print("Click Egg")
 
-        task.wait(0.3)
+LastCollectedEgg = egg
+CarryingEgg = true
+
+fireclickdetector(cd)
+
+task.wait(0.2)
     end
+
+    autoRaiseRunning = false
 end
 
-KillingCheats:CreateToggle("Auto Raise Luck", function(state)
-    autoRaiseActive = state
+KillingCheats:CreateToggle(
+    "Auto Raise Luck",
+    function(state)
 
-    if state then
+        autoRaiseActive = state
 
-        local statue = workspace:FindFirstChild("StatueBlessing")
+        local statue =
+            workspace:FindFirstChild("StatueBlessing")
 
-        if statue and statue:FindFirstChild("HumanoidRootPart") then
-            local pp = statue.HumanoidRootPart:FindFirstChild("ProximityPrompt")
+        if statue then
 
-            if pp then
-                pcall(function()
-                    pp.HoldDuration = 0
-                end)
+            for _, obj in ipairs(
+                statue:GetDescendants()
+            ) do
+
+                if obj:IsA("BasePart") then
+                    obj.CanCollide = not state
+                end
+            end
+
+            local statueHRP =
+                statue:FindFirstChild(
+                    "HumanoidRootPart"
+                )
+
+            if statueHRP then
+
+                local pp =
+                    statueHRP:FindFirstChild(
+                        "ProximityPrompt"
+                    )
+
+                if pp then
+
+                    if state then
+                        pp.HoldDuration = 0
+                    else
+                        pp.HoldDuration = 1.5
+                    end
+                end
             end
         end
 
-        task.spawn(autoRaiseLoop)
+        if state then
 
-        print("Auto Raise Luck: ON")
+            task.spawn(
+                autoRaiseLoop
+            )
 
-    else
+            print(
+                "Auto Raise Luck: ON"
+            )
 
-        local statue = workspace:FindFirstChild("StatueBlessing")
+        else
 
-        if statue and statue:FindFirstChild("HumanoidRootPart") then
-            local pp = statue.HumanoidRootPart:FindFirstChild("ProximityPrompt")
-
-            if pp then
-                pcall(function()
-                    pp.HoldDuration = 1.5
-                end)
-            end
+            print(
+                "Auto Raise Luck: OFF"
+            )
         end
-
-        print("Auto Raise Luck: OFF")
     end
-end)
+)
+
+local priorityEggActive = false
+local priorityRunning = false
+
+local PriorityEggs = {
+    UGC = {"Relic"},
+    ["???"] = {"Quantum", "ERR0R", "Malware", "Endless", "Dark Matter"},
+    Ascended = {"Seraphim", "Unknown"},
+    Shiny = {"Shiny Egg", "Shiny Grass", "Shiny Corroded", "Shiny Glass", "Shiny Fish", "Shiny Iron", "Shiny Ghost", "Shiny Fire", "Shiny Wategg", "Shiny Blueberregg", "Shiny Golden", "Shiny Seraphim"},
+    Ethereal = {"Layered", "Burger", "Blackhole", "Ruby", "Infinitegg", "Zen", "Darkness", "Sapphire", "Ruby Faberge", "Royal", "Illusion", "Matterless", "God", "Dragonic", "Dragonfruit", "Nuclear Egg", "Floppegg", "H@ACK £GG", "Rage", "Ancient Egg", "NUKE", "Corrupted", "Inferno"},
+    Mythical = {"Eggday", "Ice", "Appegg", "CartRide", "Crabegg", "Blueberregg", "RoEgg", "Golden", "Squid", "Holy", "Paradox", "Super Ghost", "DogEgg", "Hermit Egg", "Impegg", "EggDroid 2017", "CocoEgg", "Futuristegg", "Odd Egg", "Soretro", "Platinium", "Oasis", "Pharaoh"},
+    Legendary = {"Angry", "Frogg", "Bee", "Pull", "Eg", "Paintegg", "Seedlegg", "Core", "Wild", "Magma", "Cheese", "Corrupted", "Banana", "Electricitegg", "Orangegg", "Sun", "Limegg", "Diamond", "Computegg", "Heategg", "Stary", "Island", "Puffer Egg", "Glue", "4 Dimensional", "Lagegg", "Meteoregg", "Cloudegg", "Poison", "Trollegg", "Sand Wormegg"},
+    Epic = {"Ash", "Chikegg", "Dinegg", "Fire", "Plant", "Chocolate", "Tabby", "Lampegg", "Clock", "Wategg", "Dugk", "Egg Mimic", "Craftingtablegg", "Scorpiegg", "Spikegg", "Anvlegg", "Hammer Egg", "Battregg", "Lotus Egg", "Bomb"}
+}
+
+local PriorityOrder = {
+    "UGC",
+    "???",
+    "Ascended",
+    "Shiny",
+    "Ethereal",
+    "Mythical",
+    "Legendary",
+    "Epic"
+}
+
+local PriorityValue = {
+    Epic = 1,
+    Legendary = 2,
+    Mythical = 3,
+    Ethereal = 4,
+    Shiny = 5,
+    Ascended = 6,
+    ["???"] = 7,
+    UGC = 8
+}
+
+local MAX_DISTANCE = 600
+
+local function findPriorityEgg()
+
+    local eggsFolder =
+        workspace:FindFirstChild("Eggs")
+
+    if not eggsFolder then
+        return nil
+    end
+
+    for _, rarity in ipairs(PriorityOrder) do
+
+        local bestEgg
+        local bestDistance = math.huge
+
+        for _, eggName in ipairs(
+            PriorityEggs[rarity]
+        ) do
+
+            for _, egg in ipairs(
+                eggsFolder:GetChildren()
+            ) do
+
+                if egg.Name == eggName then
+
+                    local distance =
+                        (hrp.Position -
+                        egg:GetPivot().Position).Magnitude
+
+                    if distance <= 600
+                        and distance < bestDistance then
+
+                        bestDistance = distance
+                        bestEgg = egg
+                    end
+                end
+            end
+        end
+
+        if bestEgg then
+            return bestEgg, rarity
+        end
+    end
+
+    return nil
+end
+
+local function getHigherPriorityEgg(
+    currentRarity
+)
+
+    local currentValue =
+        PriorityValue[currentRarity]
+
+    local egg, rarity =
+        findPriorityEgg()
+
+    if egg
+        and PriorityValue[rarity]
+        > currentValue then
+
+        return egg, rarity
+    end
+
+    return nil
+end
+
+local function moveToPriorityEgg(
+    egg,
+    rarity
+)
+
+    local start = tick()
+
+    while tick() - start < 15 do
+
+        if not priorityEggActive then
+            return false
+        end
+
+        if not egg.Parent then
+            return false
+        end
+
+        local position =
+            egg:GetPivot().Position
+
+        humanoid:MoveTo(position)
+
+        local distance =
+            (hrp.Position - position).Magnitude
+
+        if distance <= 2.5 then
+
+            humanoid:MoveTo(
+                hrp.Position
+            )
+
+            return true
+        end
+
+        local betterEgg,
+              betterRarity =
+            getHigherPriorityEgg(
+                rarity
+            )
+
+        if betterEgg then
+
+            print(
+                "[Priority Egg] Upgrade:",
+                egg.Name,
+                "->",
+                betterEgg.Name
+            )
+
+            egg = betterEgg
+            rarity = betterRarity
+
+            start = tick()
+        end
+
+        task.wait(0.1)
+    end
+
+    return false
+end
+
+local function priorityEggLoop()
+
+    if priorityRunning then
+        return
+    end
+
+    priorityRunning = true
+
+    while priorityEggActive do
+
+        task.wait(0.1)
+
+        if not refreshCharacter() then
+            continue
+        end
+
+        local egg, rarity =
+            findPriorityEgg()
+
+        if not egg then
+
+            pauseAutoRaise = false
+
+            continue
+        end
+
+        pauseAutoRaise = true
+
+        print(
+            "[Priority Egg] Found:",
+            egg.Name,
+            "|",
+            rarity
+        )
+
+        local reached =
+            moveToPriorityEgg(
+                egg,
+                rarity
+            )
+
+        if not reached then
+
+            pauseAutoRaise = false
+
+            continue
+        end
+
+        local clickDetector =
+            egg:FindFirstChildOfClass(
+                "ClickDetector"
+            )
+
+        if clickDetector then
+
+            fireclickdetector(
+                clickDetector
+            )
+
+            print(
+                "[Priority Egg] Clicked:",
+                egg.Name
+            )
+        end
+
+        task.wait(0.3)
+
+        local indicator =
+            workspace.World2
+            .Index
+            :FindFirstChild(
+                "Indicator"
+            )
+
+        if indicator then
+
+            local targetPosition =
+                indicator:GetPivot()
+                .Position
+
+            humanoid:MoveTo(
+                targetPosition
+            )
+
+            repeat
+
+                task.wait(0.1)
+
+            until
+                (hrp.Position -
+                targetPosition).Magnitude <= 4
+                or not priorityEggActive
+        end
+
+        print(
+            "[Priority Egg] Reached Indicator"
+        )
+
+        pauseAutoRaise = false
+
+        task.wait(0.5)
+    end
+
+    priorityRunning = false
+end
+
+KillingCheats:CreateToggle(
+    "Auto Priority Egg",
+    function(state)
+
+        priorityEggActive = state
+
+        if state then
+
+            task.spawn(
+                priorityEggLoop
+            )
+
+            print(
+                "Auto Priority Egg: ON"
+            )
+
+        else
+
+            pauseAutoRaise = false
+
+            print(
+                "Auto Priority Egg: OFF"
+            )
+        end
+    end
+)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
